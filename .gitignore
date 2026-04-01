@@ -1,0 +1,4 @@
+# Local generated replication and smoke-test workspaces
+/smoke_test_run/
+/replication_*/
+/*_test_run/
