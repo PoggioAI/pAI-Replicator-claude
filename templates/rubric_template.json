@@ -1,0 +1,91 @@
+{
+  "paper_title": "",
+  "paper_venue": "",
+  "rubric_version": "1.0",
+  "total_items": 0,
+  "categories": {
+    "code_development": {
+      "weight": 0.40,
+      "description": "Correct implementation of paper's methods, models, losses, and baselines",
+      "subcategories": {
+        "model_implementation": {
+          "weight": 0.40,
+          "description": "Main model architectures, layers, components",
+          "items": []
+        },
+        "data_pipeline": {
+          "weight": 0.20,
+          "description": "Data loading, preprocessing, augmentation",
+          "items": []
+        },
+        "training_loop": {
+          "weight": 0.20,
+          "description": "Training procedure, optimizer, scheduler, loss computation",
+          "items": []
+        },
+        "baselines": {
+          "weight": 0.20,
+          "description": "Comparison methods from paper tables/figures",
+          "items": []
+        }
+      }
+    },
+    "execution": {
+      "weight": 0.30,
+      "description": "Code runs without errors; scripts produce outputs",
+      "subcategories": {
+        "runnable_scripts": {
+          "weight": 0.50,
+          "description": "Experiment scripts for each table/figure are runnable",
+          "items": []
+        },
+        "configuration": {
+          "weight": 0.30,
+          "description": "All hyperparameters exposed in config files",
+          "items": []
+        },
+        "documentation": {
+          "weight": 0.20,
+          "description": "README, requirements, reproduction instructions",
+          "items": []
+        }
+      }
+    },
+    "result_match": {
+      "weight": 0.30,
+      "description": "Experimental results match paper claims within tolerance",
+      "subcategories": {
+        "main_results": {
+          "weight": 0.60,
+          "description": "Primary table/figure results match paper numbers",
+          "items": []
+        },
+        "ablation_results": {
+          "weight": 0.30,
+          "description": "Ablation study results reproducible",
+          "items": []
+        },
+        "baseline_comparisons": {
+          "weight": 0.10,
+          "description": "Baseline numbers match paper-reported values",
+          "items": []
+        }
+      }
+    }
+  },
+  "leaf_item_schema": {
+    "_comment": "Schema reference — do not include in actual rubric items",
+    "id": "string — format: CD-001, EX-001, RM-001 (prefix by category)",
+    "category": "code_development | execution | result_match",
+    "subcategory": "model_implementation | data_pipeline | training_loop | baselines | runnable_scripts | configuration | documentation | main_results | ablation_results | baseline_comparisons",
+    "description": "Exactly what must be true for this item to pass (single, verifiable claim)",
+    "verification_method": "file_exists | import_check | value_check | run_check | number_match",
+    "weight": "float between 0 and 1 (relative to sibling items in same subcategory)",
+    "difficulty": "easy | medium | hard",
+    "paper_reference": "section/equation/table/figure reference (e.g. 'Table 2, Section 4.1')",
+    "status": "pending | implemented | verified | skipped",
+    "evidence_file": "relative path to implementing file, or null",
+    "evidence_line": "line number in evidence_file, or null",
+    "skip_reason": "string explaining why item was skipped (proprietary data, etc.), or null"
+  }
+}

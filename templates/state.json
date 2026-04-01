@@ -1,0 +1,62 @@
+{
+  "replication_id": "",
+  "workspace": "",
+  "paper_pdf_path": "",
+  "paper_title": "",
+  "paper_venue": "",
+  "paper_short_name": "",
+  "current_phase": "pdf_ingestion",
+  "phase_status": "pending",
+  "completed_phases": [],
+  "failed_phases": [],
+  "phase_retry_counts": {
+    "pdf_ingestion": 0,
+    "rubric_decomposition": 0,
+    "repo_architecture": 0,
+    "persona_council": 0,
+    "core_algorithm": 0,
+    "data_pipeline": 0,
+    "training_infrastructure": 0,
+    "cpu_verification": 0,
+    "baseline_implementation": 0,
+    "experiment_scripts": 0,
+    "documentation": 0,
+    "rubric_audit": 0,
+    "final_review": 0
+  },
+  "gate_results": {
+    "rubric_coverage_gate": null,
+    "cpu_verification_gate": null,
+    "final_score_gate": null
+  },
+  "cpu_verification_passed": false,
+  "cpu_verification_attempts": 0,
+  "rubric_item_count": 0,
+  "rubric_items_covered": 0,
+  "rubric_items_verified": 0,
+  "persona_council_round": 0,
+  "persona_verdicts": {
+    "architect": null,
+    "rigor": null,
+    "judge": null
+  },
+  "council_complete": false,
+  "paperbench_score_estimate": null,
+  "paperbench_score_breakdown": {
+    "code_development": null,
+    "execution": null,
+    "result_match": null
+  },
+  "fixmore_cycles": 0,
+  "user_checkpoints": [],
+  "total_phases_run": 0,
+  "implementation_stats": {
+    "total_files_created": 0,
+    "total_lines_of_code": 0,
+    "baselines_implemented": 0,
+    "experiment_scripts_created": 0
+  },
+  "finished": false,
+  "created_at": "",
+  "last_updated": ""
+}
