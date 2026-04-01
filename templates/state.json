@@ -5,11 +5,19 @@
   "paper_title": "",
   "paper_venue": "",
   "paper_short_name": "",
-  "current_phase": "pdf_ingestion",
+
+  "_comment_decomp": "Multi-repo decomposition state — set after Phase 0",
+  "decomposition_type": null,
+  "sub_repos": [],
+  "active_sub_repo": null,
+  "sub_repo_states": {},
+
+  "current_phase": "paper_decomposition",
   "phase_status": "pending",
   "completed_phases": [],
   "failed_phases": [],
   "phase_retry_counts": {
+    "paper_decomposition": 0,
     "pdf_ingestion": 0,
     "rubric_decomposition": 0,
     "repo_architecture": 0,
@@ -22,7 +30,8 @@
     "experiment_scripts": 0,
     "documentation": 0,
     "rubric_audit": 0,
-    "final_review": 0
+    "final_review": 0,
+    "aggregation": 0
   },
   "gate_results": {
     "rubric_coverage_gate": null,
@@ -47,6 +56,7 @@
     "execution": null,
     "result_match": null
   },
+  "combined_score_estimate": null,
   "fixmore_cycles": 0,
   "user_checkpoints": [],
   "total_phases_run": 0,

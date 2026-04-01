@@ -28,7 +28,7 @@ Print this banner:
 Then ask: **"New replication or resume existing one?"**
 
 - **New**: Ask for (a) path to the paper PDF, (b) a short name for the project (e.g., `retnet-2023`). Then initialize workspace.
-- **Resume**: Ask for the workspace path. Load `state.json`. Print current phase and jump to it.
+- **Resume**: Ask for the workspace path. Load `state.json`. If `active_sub_repo` is set, resume from `sub_repos[active_sub_repo].current_phase`. Otherwise resume from `current_phase`.
 
 ---
 
@@ -69,7 +69,11 @@ Initialize `{WORKSPACE}/state.json` from `{SKILL_DIR}/templates/state.json` with
   "workspace": "{WORKSPACE}",
   "paper_pdf_path": "{WORKSPACE}/input/paper.pdf",
   "paper_short_name": "{paper_short_name}",
-  "current_phase": "pdf_ingestion",
+  "decomposition_type": null,
+  "sub_repos": [],
+  "active_sub_repo": null,
+  "sub_repo_states": {},
+  "current_phase": "paper_decomposition",
   "created_at": "{ISO timestamp}"
 }
 ```
@@ -80,11 +84,21 @@ Print: `✓ Workspace initialized at: {WORKSPACE}`
 
 ## Phase Routing Table
 
-After startup or resume, route to the current phase:
+### Pre-loop phases (run once, before sub-repo loop)
 
 | Phase | Phase Name | Prompt File | Next Phase |
 |-------|-----------|-------------|------------|
-| 1 | pdf_ingestion | prompts/05-pdf-ingestion.md | rubric_decomposition |
+| 0 | paper_decomposition | prompts/00-paper-decomposition.md | pdf_ingestion |
+| 1 | pdf_ingestion | prompts/05-pdf-ingestion.md | [Multi-Repo Gate] → sub-repo loop |
+
+After Phase 1, read `paper_decomposition.json`:
+- `decomposition_type == "single"` → set `active_sub_repo = sub_repos[0].id`, enter sub-repo loop
+- `decomposition_type == "multi"` → show decomposition summary to user, get PROCEED, then enter sub-repo loop
+
+### Sub-repo loop phases (run once per sub-repo, in dependency order)
+
+| Phase | Phase Name | Prompt File | Next Phase |
+|-------|-----------|-------------|------------|
 | 2 | rubric_decomposition | prompts/06-rubric-decomposition.md | [Gate 1] → repo_architecture |
 | 3 | repo_architecture | prompts/07-repo-architecture.md | persona_council |
 | 3b | persona_council | prompts/01–04 (council) | core_algorithm |
@@ -96,7 +110,17 @@ After startup or resume, route to the current phase:
 | 9 | experiment_scripts | prompts/13-experiment-scripts.md | documentation |
 | 10 | documentation | prompts/14-documentation.md | rubric_audit |
 | 11 | rubric_audit | prompts/15-rubric-audit.md | final_review |
-| 12 | final_review | prompts/16-final-review.md | DONE |
+| 12 | final_review | prompts/16-final-review.md | [Next sub-repo or aggregation] |
+
+After Phase 12 for a sub-repo: mark that sub-repo as `completed` in `state.json → sub_repo_states`. If more sub-repos remain, start the next one from Phase 2. When all sub-repos are complete, run the aggregation phase.
+
+### Post-loop phase (run once, after all sub-repos complete)
+
+| Phase | Phase Name | Prompt File | Next Phase |
+|-------|-----------|-------------|------------|
+| 13 | aggregation | (inline — see Multi-Repo Aggregation section) | DONE |
+
+For single-repo papers, Phase 13 is trivial (just confirms the single sub-repo is done).
 
 ---
 
@@ -307,6 +331,216 @@ Update: {WORKSPACE}/analysis_workspace/implementation_checklist.json
 - Round 5 → exit regardless
 
 Update `state.json → persona_council_round`, `persona_verdicts`, `council_complete`.
+
+---
+
+## Multi-Repo Loop
+
+### When Multi-Repo Applies
+
+After Phase 1 (PDF ingestion), the orchestrator reads `analysis_workspace/paper_decomposition.json`. If `decomposition_type == "multi"`, the pipeline runs phases 2–12 independently for each sub-repo, in dependency order.
+
+### Sub-Repo Workspace Layout
+
+For each sub-repo, all analysis and code is isolated under a sub-workspace:
+
+```
+{WORKSPACE}/
+  input/                          ← shared: paper PDF + extracted text
+  analysis_workspace/             ← shared: paper_analysis.json, paper_decomposition.json
+  sub_{sub_repo_id}/              ← per-sub-repo workspace (one per sub-repo)
+    analysis_workspace/           ← sub-repo-specific rubric, architecture plan, etc.
+    code_workspace/{sub_repo_name}/
+    verification_workspace/
+    persona_workspace/
+    rubric_audit/
+    logs/
+  aggregation/                    ← final combined summary (written in Phase 13)
+```
+
+### Sub-Repo Loop Logic
+
+```
+# After Phase 1 completes:
+decomp = read("analysis_workspace/paper_decomposition.json")
+
+if decomp.decomposition_type == "multi":
+    print sub-repo summary (names, scopes, dependency order)
+    ask user: "Found {N} sub-repos. PROCEED to replicate all in order?"
+    wait for PROCEED
+
+# Run sub-repos in dependency order
+for sub_repo in sorted(decomp.sub_repos, by=dependency_order):
+
+    if sub_repo_states[sub_repo.id].status == "completed":
+        print f"[SKIP] {sub_repo.id} already completed"
+        continue
+
+    # Check dependencies are satisfied
+    for dep_id in sub_repo.dependencies_on_other_sub_repos:
+        if sub_repo_states[dep_id].status != "completed":
+            print f"[WAITING] {sub_repo.id} depends on {dep_id} — completing dependency first"
+            # dependency will be picked up by the outer loop
+
+    # Print sub-repo header
+    print banner: "━━━ SUB-REPO {i}/{N}: {sub_repo.name} ━━━"
+    print f"Scope: {sub_repo.scope}"
+    print f"Covers: {sub_repo.figures_covered}, {sub_repo.tables_covered}"
+
+    # Initialize sub-repo state
+    state["active_sub_repo"] = sub_repo.id
+    state["sub_repo_states"][sub_repo.id] = {
+        "status": "in_progress",
+        "current_phase": "rubric_decomposition",
+        "completed_phases": [],
+        "sub_workspace": f"{WORKSPACE}/sub_{sub_repo.id}/"
+    }
+    create_sub_workspace_dirs(sub_repo)
+
+    # Inject sub-repo scope into every phase prompt context block:
+    # "ACTIVE SUB-REPO: {sub_repo.name}
+    #  Scope: {sub_repo.scope}
+    #  Paper sections: {sub_repo.primary_paper_sections}
+    #  Figures to cover: {sub_repo.figures_covered}
+    #  Tables to cover: {sub_repo.tables_covered}
+    #  Sub-workspace: {WORKSPACE}/sub_{sub_repo.id}/"
+
+    # Run phases 2-12 with sub-workspace paths
+    for phase in [2, 3, "3b", 4, 5, 6, 7, 8, 9, 10, 11, 12]:
+        run_phase_in_sub_workspace(phase, sub_repo, sub_workspace)
+
+    # Mark complete
+    state["sub_repo_states"][sub_repo.id]["status"] = "completed"
+    state["active_sub_repo"] = None
+    print f"✓ Sub-repo {sub_repo.id} complete."
+
+# All sub-repos done → Phase 13
+run_aggregation_phase()
+```
+
+### Sub-Repo Phase Scoping Rules
+
+When running inside a sub-repo, ALL file paths in the phase context block are relative to the sub-workspace, not the top-level workspace:
+
+| Standard path | Sub-repo scoped path |
+|--------------|---------------------|
+| `{WORKSPACE}/analysis_workspace/rubric.json` | `{WORKSPACE}/sub_{id}/analysis_workspace/rubric.json` |
+| `{WORKSPACE}/code_workspace/{name}/` | `{WORKSPACE}/sub_{id}/code_workspace/{sub_repo.name}/` |
+| `{WORKSPACE}/verification_workspace/` | `{WORKSPACE}/sub_{id}/verification_workspace/` |
+| `{WORKSPACE}/persona_workspace/` | `{WORKSPACE}/sub_{id}/persona_workspace/` |
+| `{WORKSPACE}/rubric_audit/` | `{WORKSPACE}/sub_{id}/rubric_audit/` |
+
+Exception: `{WORKSPACE}/input/paper.pdf` and `{WORKSPACE}/analysis_workspace/paper_analysis.json` remain shared — sub-repo phases read from top-level for the overall paper context.
+
+Every phase prompt context block includes a sub-repo scope block:
+```
+=== ACTIVE SUB-REPO ===
+ID: {sub_repo.id}
+Name: {sub_repo.name}
+Scope: {sub_repo.scope}
+Primary sections: {sub_repo.primary_paper_sections}
+Figures to cover: {sub_repo.figures_covered}
+Tables to cover: {sub_repo.tables_covered}
+Sub-workspace: {WORKSPACE}/sub_{sub_repo.id}/
+NOTE: For this sub-repo, only implement/replicate the components in the scope above.
+      Shared components ({shared_components}) should be imported from sub_repo_1 if already implemented.
+=== END ACTIVE SUB-REPO ===
+```
+
+### Handling Shared Components
+
+When `paper_decomposition.json → shared_components` is non-empty, the second (and later) sub-repo's Phase 4–6 prompts include:
+
+```
+SHARED COMPONENTS AVAILABLE: {shared_components}
+These are already implemented in: {WORKSPACE}/sub_{first_sub_repo_id}/code_workspace/{name}/src/
+Instead of reimplementing them, create symlinks or copy the relevant modules.
+```
+
+### Inter-Sub-Repo Dependencies
+
+If `sub_repo.dependencies_on_other_sub_repos` is non-empty (e.g., finetuning code needs pretrained model outputs), the dependent sub-repo's experiment scripts include:
+
+```yaml
+# In configs for dependent sub-repo
+upstream_checkpoint: "{WORKSPACE}/sub_{dep_id}/code_workspace/{dep_name}/results/pretrained_model.pt"
+```
+
+This is flagged as `requires_upstream_run: true` in `experiment_manifest.json` for the dependent sub-repo.
+
+---
+
+## Multi-Repo Aggregation (Phase 13)
+
+After all sub-repos complete, run the aggregation phase:
+
+### Aggregation Logic
+
+```
+1. Read paperbench_score_estimate.json from each sub-repo:
+   {WORKSPACE}/sub_{id}/rubric_audit/paperbench_score_estimate.json
+
+2. Compute combined score:
+   combined_score = weighted average of sub-repo scores
+   (weight each sub-repo equally, or by number of rubric items)
+
+3. Write aggregation summary: {WORKSPACE}/aggregation/summary.md
+
+4. Write combined score: {WORKSPACE}/aggregation/combined_score.json
+
+5. Write master README: {WORKSPACE}/README.md (links to each sub-repo README)
+```
+
+### Aggregation Summary Format
+
+```markdown
+# Replication Summary: {paper_title}
+
+**Combined PaperBench Score Estimate: {X}%**
+
+## Sub-Repositories
+
+| Sub-Repo | Scope | Score Estimate | CPU Tests | Key Gaps |
+|---------|-------|---------------|-----------|---------|
+| {sub_repo_1} | {scope} | {X}% | ALL PASS | {list} |
+| {sub_repo_2} | {scope} | {X}% | ALL PASS | {list} |
+
+## Dependency Graph
+
+{sub_repo_2} depends on outputs of {sub_repo_1}:
+  - pretrained model: sub_{id_1}/results/pretrained_model.pt
+
+## Combined Repository Structure
+
+{WORKSPACE}/
+  sub_{id_1}/{name}/   ← {scope_1}
+  sub_{id_2}/{name}/   ← {scope_2}
+  README.md            ← master guide linking sub-repos
+
+## How to Reproduce All Results
+
+1. Run {sub_repo_1} first: see sub_{id_1}/code_workspace/{name}/README.md
+2. Run {sub_repo_2}: see sub_{id_2}/code_workspace/{name}/README.md
+   (requires outputs from step 1)
+```
+
+### Completion Banner (multi-repo)
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║         pAI-REPLICATOR — MULTI-REPO REPLICATION COMPLETE           ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  Paper: {title} ({venue})                                           ║
+║  Sub-repos replicated: {N}                                          ║
+║                                                                      ║
+║  Combined PaperBench Score: {X}%                                    ║
+║    {sub_repo_1}: {X}%                                               ║
+║    {sub_repo_2}: {X}%                                               ║
+║                                                                      ║
+║  All sub-repos: {WORKSPACE}/sub_*/                                  ║
+║  Master README: {WORKSPACE}/README.md                               ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
 ---
 
