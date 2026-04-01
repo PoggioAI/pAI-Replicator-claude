@@ -1,10 +1,12 @@
-# Phase 0: Paper Decomposition — Single-Repo vs. Multi-Repo Analysis
+# Phase 0: Paper Decomposition — Experiment Module Analysis
 
 ## Objective
 
-Before building any rubric or writing any code, decide: does this paper require **one unified repository** or **multiple independent sub-repositories**? This decision shapes the entire pipeline.
+Before building any rubric or writing any code, decide: does this paper's experiments form a **single coherent pipeline** or do they split into **distinct experiment modules** that are best developed in isolation?
 
-**Why this matters for PaperBench:** PaperBench evaluates each sub-repository independently. A paper that requires two separate codebases (e.g., pretraining + finetuning) will have separate rubrics for each. If you lump them into one repo, you may fail rubric items that expect separate entry points and scripts.
+**All modules always live in ONE unified repository.** This decision is about whether to run phases 2–12 once (for the whole paper) or once per module (e.g., toy-model experiments, vision experiments, NanoGPT runs). Shared infrastructure (training loops, base models, data utilities) is implemented once in `src/` and reused across modules.
+
+**Why this matters for PaperBench:** PaperBench evaluates one repository. Multi-module decomposition helps organize complex papers without fragmenting the codebase — it ensures each experiment cluster gets dedicated rubric coverage, configs, and scripts.
 
 ---
 
@@ -24,60 +26,58 @@ Before building any rubric or writing any code, decide: does this paper require 
   "decomposition_type": "single | multi",
   "sub_repos": [
     {
-      "id": "sub_repo_1",
-      "name": "short-name-for-directory",
-      "scope": "what this sub-repo implements (1-2 sentences)",
+      "id": "module_1",
+      "name": "short-name-for-experiments-subdir",
+      "scope": "what experiment cluster this module covers (1-2 sentences)",
       "primary_paper_sections": ["Section 3", "Section 5"],
       "figures_covered": ["Figure 1", "Figure 2"],
       "tables_covered": ["Table 1"],
       "key_components": ["main model", "training loop"],
       "dependencies_on_other_sub_repos": [],
       "estimated_complexity": "low | medium | high",
-      "rationale": "why this is a separate sub-repo"
+      "rationale": "why this cluster deserves its own module"
     }
   ],
-  "decomposition_rationale": "why single vs multi",
-  "shared_components": ["data loading", "evaluation metrics"],
-  "shared_component_strategy": "how shared components will be handled (copy vs. shared package)"
+  "decomposition_rationale": "why single vs multi-module",
+  "shared_components": ["data loading", "base model", "evaluation metrics"],
+  "shared_component_strategy": "all shared code lives in src/, imported by each module's scripts"
 }
 ```
+
+**Note:** All modules live in the same repository. `sub_repos` entries map to `experiments/{name}/`, `configs/{name}/`, and `scripts/{name}/` directories — not separate repo roots.
 
 ---
 
 ## Decision Rules
 
-### When to choose SINGLE repo
+### When to choose SINGLE (one pass through phases 2–12)
 
-Use a single repo when:
-- All experiments use the same model training infrastructure
-- The paper's contribution is a single method applied to multiple datasets
-- All figures/tables can be reproduced from one codebase with different configs
+Use single when:
+- All experiments use the same model and training infrastructure
+- The paper's contribution is one method applied to multiple datasets
+- All figures/tables can be reproduced with different configs from the same entry point
 - The paper is primarily theory with small supporting experiments
 
 **Examples:**
-- EOSS paper: all experiments use the same SGD+curvature-measurement infrastructure → single repo
-- An optimizer paper: all experiments use the same optimizer code on different tasks → single repo
-- A regularization technique: same technique, different datasets → single repo
+- EOSS paper: all experiments use SGD + curvature measurement → single
+- An optimizer paper: same optimizer on different tasks → single
+- A regularization technique on multiple benchmarks → single
 
-### When to choose MULTI repo
+### When to choose MULTI (run phases 2–12 once per module)
 
-Use multiple sub-repos when ANY of these hold:
+Use multi when the paper has **distinct experiment clusters** that differ in model architecture, data format, or experimental setup. All modules still live in one repo — multi just means developing them in separate passes so each gets focused rubric, architecture design, and CPU testing.
 
-1. **Fundamentally different tech stacks**: Part A uses PyTorch, Part B uses JAX. Part A is a vision model, Part B is a language model with completely different data formats.
-
-2. **Separate entry-point architectures**: The paper proposes a pretraining method AND a downstream evaluation method where the downstream code is conceptually separate (different teams, different repos in practice). E.g., BERT: pretraining code ≠ finetuning code.
-
-3. **Independent research contributions**: The paper makes two separate contributions that happen to be in one paper but are independently replicable (e.g., a new architecture AND a new training recipe that are tested separately).
-
-4. **Large benchmark papers**: Each experiment is a separate method reimplementation (e.g., a paper that reimplements 5 baselines from scratch and proposes a 6th). Each reimplementation is a sub-repo.
-
-5. **Explicit code modularity cue**: Paper text says "we release three separate codebases", or the paper's appendix shows clearly separated module hierarchies that don't share code.
+**Examples:**
+- Paper has toy 2D experiments + CIFAR-10 CNN + NanoGPT language model → three modules
+- BERT: pretraining experiments + downstream finetuning experiments → two modules
+- Paper proposes method A on vision and method B on NLP → two modules
+- Large benchmark reimplementing 5 baselines + 1 new method → modules per method
 
 ### Edge cases (when uncertain, ask the user)
 
-- Paper proposes method A on vision and method B on NLP: likely two sub-repos (different data + model stacks)
-- Paper evaluates on 5 datasets with different preprocessings: likely single repo (same model, same training, different configs)
-- Paper has a theory component with math proofs + an empirical component: single repo (the empirical code supports the theory)
+- Paper evaluates on 5 datasets with different preprocessings but same model: likely single (different configs)
+- Theory paper with math proofs + empirical validation: single (empirical code supports theory)
+- Paper releases experiments at very different scales (toy vs. large): two modules
 
 ---
 
@@ -96,19 +96,17 @@ Look at:
 
 Write out reasoning: "This paper uses [tech stack], [datasets], and [experiments]. Based on [rule], this is [single/multi]."
 
-### Step 3: If MULTI, define sub-repo boundaries
+### Step 3: If MULTI, define module boundaries
 
-For each sub-repo:
-- What are its inputs/outputs?
-- What paper sections/figures does it cover?
-- Does it depend on outputs from another sub-repo? (e.g., downstream code needs pretrained model from pretraining code)
-- Dependency order: which sub-repo must be completed first?
+For each module:
+- What experiment cluster does it cover? (figures, tables, sections)
+- What shared infrastructure does it use from `src/`?
+- Does it depend on outputs from another module? (e.g., finetuning needs pretrained model)
+- Dependency order: which module must be completed first?
 
 ### Step 4: Write paper_decomposition.json
 
-Explicitly enumerate `sub_repos` (even if there is only 1 — just set `decomposition_type: "single"` and list the one sub-repo).
-
-Always list exactly one sub-repo for single-repo papers so the orchestrator loop works uniformly:
+Always enumerate `sub_repos` — even for single papers, list one entry so the orchestrator loop works uniformly:
 ```json
 {
   "decomposition_type": "single",
@@ -123,18 +121,21 @@ Always list exactly one sub-repo for single-repo papers so the orchestrator loop
 After this phase, the orchestrator asks:
 
 ```
-I've analyzed the paper and determined it requires {1/N} repository/repositories:
+I've analyzed the paper and determined it needs {1/N} experiment module(s):
 
 {If single:}
-  → Single unified repo: {name}
+  → One unified pipeline: {name}
   → Covers: all {M} figures, {N} tables
 
 {If multi:}
-  → Sub-repo 1: {name} — {scope}
+  → Module 1: {name} — {scope}
      Covers: Figures {X}, Tables {Y}
-  → Sub-repo 2: {name} — {scope}
+  → Module 2: {name} — {scope}
      Covers: Figures {X}, Tables {Y}
-  → Sub-repo N depends on outputs of sub-repo M: {dependency description}
+  → Module N depends on outputs of Module M: {dependency}
+
+All modules share one repo. Each gets its own rubric pass, architecture design,
+and CPU verification, with shared infrastructure in src/.
 
 Does this decomposition look right? Type PROCEED or describe corrections.
 ```

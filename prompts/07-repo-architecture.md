@@ -122,6 +122,18 @@ Every replication should follow this structure. Adapt as needed for the specific
       __init__.py
       logging.py                # Logging utilities
       checkpointing.py          # Checkpoint save/load
+    {domain}/                   # Domain-specific module if needed
+      __init__.py               # e.g., src/curvature/, src/probes/, src/metrics/
+      ...                       # Add this directory when the paper has custom
+                                # measurement or analysis infrastructure not
+                                # covered by models/training/evaluation.
+                                # Examples: src/curvature/ (sharpness measurement),
+                                # src/geometry/ (loss landscape analysis),
+                                # src/attribution/ (feature attribution methods)
+
+  experiments/                  # Per-module entry points (multi-module papers only)
+    {module_name}/              # One subdirectory per experiment module
+      ...                       # Module-specific scripts and notebooks
 
   baselines/
     __init__.py

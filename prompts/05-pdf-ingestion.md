@@ -129,7 +129,18 @@ A structured JSON with these top-level keys:
     "mentioned_in_paper": false,
     "url": "",
     "notes": ""
-  }
+  },
+  "paper_type": "theory | architecture | optimizer | benchmark | empirical",
+  "paper_type_rationale": "why this type — affects rubric weighting in Phase 2",
+  "ambiguities": [
+    {
+      "id": "AMB-001",
+      "severity": "high | medium | low",
+      "what_is_unclear": "",
+      "most_likely_interpretation": "",
+      "impact_if_wrong": ""
+    }
+  ]
 }
 ```
 
@@ -223,8 +234,41 @@ Before marking Pass 1 complete, verify:
 ## Note on Ambiguities
 
 When you encounter something that is underspecified or ambiguous, do NOT make an assumption and silently proceed. Instead:
-- Add it to a top-level `"ambiguities"` key in `paper_analysis.json`
-- Describe what is unclear and what the most likely interpretation is
+- Add it to `paper_analysis.json → ambiguities[]` with `severity: "high | medium | low"`
+- Describe what is unclear, your best interpretation, and the impact of guessing wrong
 - Flag it prominently in `paper_extracted.md`
 
-These ambiguities will be surfaced at the user checkpoint so the user can clarify.
+## Note on Paper Type
+
+Classify the paper into one type:
+- **theory**: primary contribution is a theorem/proof; experiments are illustrative
+- **architecture**: primary contribution is a new model architecture (ViT, ResNet, etc.)
+- **optimizer**: primary contribution is a new training algorithm (Adam, SAM, etc.)
+- **benchmark**: primary contribution is a new dataset or evaluation suite
+- **empirical**: primary contribution is an empirical study/analysis (e.g., scaling laws)
+
+The paper type is used by Phase 2 to weight rubric categories appropriately:
+- Theory → emphasize measurement code correctness
+- Architecture → emphasize model implementation fidelity
+- Optimizer → emphasize training loop correctness
+- Benchmark → emphasize data pipeline and evaluation scripts
+- Empirical → emphasize experiment coverage and result reproduction
+
+## Checkpoint — Ambiguity Review (MANDATORY)
+
+At the Phase 1 checkpoint, **before asking PROCEED**, explicitly list all HIGH-severity ambiguities:
+
+```
+⚠️  HIGH-SEVERITY AMBIGUITIES FOUND — please resolve before Phase 2:
+
+AMB-001: {what_is_unclear}
+  My interpretation: {most_likely_interpretation}
+  Impact if wrong: {impact}
+  → Please confirm or correct
+
+AMB-002: ...
+
+If these look right, type PROCEED. Otherwise, describe corrections.
+```
+
+Do NOT advance to Phase 2 until the user has acknowledged the ambiguity list.

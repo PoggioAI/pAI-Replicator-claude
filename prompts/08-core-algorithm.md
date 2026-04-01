@@ -83,14 +83,16 @@ All model code must run on CPU out of the box:
 - Device should be passed as argument or derived from input tensors
 - No hardcoded `torch.cuda.*` calls
 
-### Standard 5: Tiny Config Support
+### Standard 5: Tiny Config — REQUIRED, exact name
 
-Every model class must support tiny configurations for CPU testing. Add a class method or separate config:
+Every model class **MUST** have a classmethod named **exactly `tiny_config`** (not `tiny()`, `make_small()`, or any other variant). The CPU verification phase calls `Model.tiny_config()` by name; any other name will cause a test failure.
 
 ```python
 @classmethod
-def tiny_config(cls):
-    """Returns a tiny model config for CPU testing."""
+def tiny_config(cls) -> "ModelClass":
+    """Returns a minimal model instance for CPU testing.
+    Uses the smallest valid hyperparameters that exercise all code paths.
+    """
     return cls(
         d_model=32,
         num_heads=2,
@@ -157,6 +159,6 @@ Before marking complete:
 - [ ] All files in `src/models/` and `src/losses/` exist and are non-empty
 - [ ] Every file has docstrings with paper citations
 - [ ] No hardcoded hyperparameter values (all are function arguments)
-- [ ] `tiny_config()` or equivalent exists for at least the main model class
+- [ ] `tiny_config()` classmethod exists with **exactly that name** on every model class
 - [ ] `implementation_checklist.json` updated for all implemented items
 - [ ] No `.cuda()` calls in any `src/` file
