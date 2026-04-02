@@ -149,7 +149,34 @@ gate_pass = cpu_test_results["overall_passed"] == True
 gate_pass = score_estimate >= 0.20
 ```
 - PASS → proceed to Phase 12.
-- FAIL → one remediation loop back through Phase 11, then force-pass.
+- FAIL → write a **gap report** and restart from Phase 1 (one time only).
+
+**Gate 3 restart protocol:**
+
+1. Write `{WORKSPACE}/rubric_audit/gate3_gap_report.json`:
+   ```json
+   {
+     "score_before_restart": X,
+     "failing_rubric_items": [...],
+     "root_causes": ["incomplete PDF extraction", "wrong architecture", "missing ablation", ...],
+     "priority_fixes": ["top 5 actionable items"],
+     "what_NOT_to_redo": ["items already correct — preserve these"]
+   }
+   ```
+
+2. Inject gap context into every phase from 1 onward:
+   ```
+   === GATE 3 RESTART — SECOND ITERATION ===
+   Previous score: {X}% (target: 20%)
+   Gap report: {WORKSPACE}/rubric_audit/gate3_gap_report.json
+   Existing paper_analysis.json and architecture are the BASELINE — do not restart from
+   scratch. Focus exclusively on the failing items listed in gate3_gap_report.json.
+   Preserve all rubric items already marked "passed".
+   === END GATE 3 RESTART ===
+   ```
+
+3. Re-run phases 1–11 with gap context injected. **Only one Gate 3 restart is allowed.**
+   After the second Phase 11, force-pass regardless of score and proceed to Phase 12.
 
 ---
 
