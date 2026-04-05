@@ -205,3 +205,17 @@ Before marking complete:
 - [ ] Evaluation saves results to `results/` directory
 - [ ] Checkpoint save/load implemented
 - [ ] `implementation_checklist.json` updated for training_loop items
+
+---
+
+## reproduce.sh — Initial Generation (paperbench_full mode only)
+
+If `state.json → mode == "paperbench_full"`, also generate an initial `reproduce.sh` at the repo root. Use `{SKILL_DIR}/templates/reproduce.sh.tmpl` as a starting point. At this stage, it should contain:
+
+1. Environment setup (`pip install -r requirements.txt`)
+2. The `run_experiment` helper function
+3. A placeholder comment: `# Experiments will be wired in Phase 9`
+
+This file will be updated in Phase 9 (experiment scripts) with actual experiment entries, and validated in Phase 13 (integration test).
+
+See `prompts/17-reproduce-sh.md` for the full specification.

@@ -315,6 +315,58 @@ if __name__ == "__main__":
 
 ---
 
+## Category 7: reproduce.sh Smoke Test (paperbench_full mode ONLY)
+
+This category is **only** tested when `state.json → mode == "paperbench_full"`. In other modes, skip it.
+
+```python
+def test_reproduce_sh():
+    """Category 7: reproduce.sh runs with MAX_STEPS=1 and exits 0."""
+    import subprocess, os
+
+    repo_dir = "code_workspace/{paper_short_name}/"
+    reproduce_sh = os.path.join(repo_dir, "reproduce.sh")
+
+    # Check file exists
+    assert os.path.exists(reproduce_sh), f"reproduce.sh not found at {reproduce_sh}"
+
+    # Check executable
+    assert os.access(reproduce_sh, os.X_OK), "reproduce.sh is not executable"
+
+    # Check has shebang
+    with open(reproduce_sh) as f:
+        first_line = f.readline()
+    assert first_line.startswith("#!/"), f"Missing shebang: {first_line[:50]}"
+
+    # Check contains pip install
+    content = open(reproduce_sh).read()
+    assert "pip install" in content or "conda install" in content, "No dependency install step"
+
+    # Run with MAX_STEPS=1 (smoke test)
+    env = os.environ.copy()
+    env["MAX_STEPS"] = "1"
+    env["DEVICE"] = "cpu"
+    result = subprocess.run(
+        ["bash", reproduce_sh],
+        cwd=repo_dir,
+        capture_output=True, text=True,
+        timeout=300,
+        env=env,
+    )
+    assert result.returncode == 0, (
+        f"reproduce.sh exited with code {result.returncode}\n"
+        f"STDERR: {result.stderr[-500:]}"
+    )
+    print("CATEGORY 7 PASSED")
+```
+
+**Pass criteria:**
+- reproduce.sh exists, is executable, has shebang
+- Contains a dependency install step
+- Exits 0 when run with `MAX_STEPS=1 DEVICE=cpu`
+
+---
+
 ## Results Schema
 
 All test results written to `verification_workspace/cpu_test_results.json`:
@@ -330,7 +382,8 @@ All test results written to `verification_workspace/cpu_test_results.json`:
     "loss_computation": {"status": "pass", "loss_value": 2.3},
     "training_step": {"status": "pass", "losses": [2.3, 2.1, 1.9, 1.7, 1.5]},
     "data_pipeline": {"status": "pass", "batch_shapes": "x=[2,3,32,32]"},
-    "script_smoke": {"status": "pass", "script": "scripts/run_table1.py"}
+    "script_smoke": {"status": "pass", "script": "scripts/run_table1.py"},
+    "reproduce_sh": {"status": "pass", "note": "paperbench_full only"}
   },
   "errors": []
 }

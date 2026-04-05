@@ -154,7 +154,7 @@ When all steps pass, print:
 ║                                                                      ║
 ║  Paper: {title} ({venue} {year})                                    ║
 ║                                                                      ║
-║  Estimated PaperBench Score: {score}%                               ║
+║  Estimated PaperBench Score: {score}% (INTERNAL ESTIMATE)           ║
 ║    Code Development: {cd_score}%  ({cd_satisfied}/{cd_total} items) ║
 ║    Execution:        {ex_score}%  ({ex_satisfied}/{ex_total} items) ║
 ║    Result Match:     {rm_score}%  ({rm_satisfied}/{rm_total} items) ║
@@ -168,6 +168,10 @@ When all steps pass, print:
 ║    1. {improvement_1} (+{X}%)                                       ║
 ║    2. {improvement_2} (+{Y}%)                                       ║
 ║    3. {improvement_3} (+{Z}%)                                       ║
+║                                                                      ║
+║                                                                      ║
+║  NOTE: This is an internal estimate, NOT an official PaperBench      ║
+║  score. Official grading requires the PaperBench LLM judge pipeline. ║
 ║                                                                      ║
 ║  See analysis_workspace/final_summary.md for full details.          ║
 ╚══════════════════════════════════════════════════════════════════════╝

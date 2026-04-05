@@ -114,10 +114,13 @@ total = 0.40 * code_dev_score + 0.30 * execution_score + 0.30 * result_match_sco
 
 Write to `rubric_audit/paperbench_score_estimate.json`:
 
+> **IMPORTANT:** This is an INTERNAL ESTIMATE — not an official PaperBench score. Official scores require the PaperBench LLM judge pipeline. Internal estimates are based on code inspection and CPU tests, not actual execution results.
+
 ```json
 {
   "timestamp": "ISO-8601",
   "score_estimate": 0.XX,
+  "score_type": "INTERNAL_ESTIMATE",
   "confidence": "medium",
   "breakdown": {
     "code_development": {

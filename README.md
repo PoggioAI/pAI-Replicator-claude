@@ -1,126 +1,147 @@
 # pAI-Replicator
 
-A Claude Code skill for replicating ICML/ICLR/NeurIPS papers from a PDF. Produces a complete, executable code repository that maximizes score on [PaperBench](https://openai.com/index/paperbench/).
-
-**Target:** Beat PaperBench. Current best AI agent: 27%. Humans: 41%.
+A Claude Code skill for replicating ML papers. Three modes: interactive PDF replication, autonomous PaperBench Code-Dev, and full PaperBench submission with `reproduce.sh`.
 
 ---
 
-## What It Does
+## Modes
 
-Given a paper PDF, pAI-Replicator runs a 12-phase pipeline:
+| Mode | Input | Autonomy | Output |
+|------|-------|----------|--------|
+| **[1] Interactive (PDF)** | Paper PDF | Checkpoint every phase | Code repo (no submission) |
+| **[2] PaperBench Code-Dev** | PaperBench bundle | Fully autonomous | Code repo (no reproduce.sh) |
+| **[3] PaperBench Full** | PaperBench bundle | Fully autonomous | Submission-ready git repo |
 
-1. **PDF Ingestion** — Deep extraction of all implementation details (architecture, hyperparameters, datasets, baselines, ablations)
-2. **Rubric Decomposition** — Builds a PaperBench-style hierarchical rubric (40-100+ items)
-3. **Repository Architecture** — Designs the complete file structure before writing code
-4. **Persona Council** — Three specialized reviewers (Code Architect, Algorithmic Rigor, PaperBench Judge) debate the plan
-5. **Core Algorithm** — Implements models, losses, and key algorithms with paper equation citations
-6. **Data Pipeline** — Implements data loading with mock-data CPU support
-7. **Training Infrastructure** — Training loop, optimizer, evaluation, logging
-8. **CPU Verification** — Mandatory: ALL tests must pass before advancing. Tests: imports, forward pass, loss, training step, data pipeline, script smoke test
-9. **Baseline Implementations** — All comparison methods from paper tables
-10. **Experiment Scripts** — One script per table and figure, with `--max-steps 1` support
-11. **Documentation** — Complete README with reproduction instructions
-12. **Rubric Audit** — Final coverage assessment + PaperBench score estimate
+**Interactive** is for human-guided replication of any ML paper from a PDF. You approve each phase before the pipeline advances.
 
-**Checkpoints after every single phase.** Never advances without user confirmation.
+**Code-Dev** ingests a PaperBench bundle (paper.md, rubric.json, addendum, blacklist) and runs the full pipeline autonomously. No `reproduce.sh` generation — targets PaperBench's code-only grading variant.
+
+**Full** does everything Code-Dev does, plus generates `reproduce.sh`, validates the submission against PaperBench requirements, and exports a self-contained git repo ready for the official evaluation pipeline.
 
 ---
 
-## Installation
-
-```bash
-# Clone into Claude Code skills directory
-git clone https://github.com/PoggioAI/pAI-Replicator-claude.git
-cd pAI-Replicator-claude
-```
-
-No additional dependencies needed — the skill runs through Claude Code.
-
----
-
-## Usage
-
-### Start a new replication
+## Quick Start
 
 ```
 /pAI-Replicator
 ```
 
-Or:
+The skill prompts for mode selection and input path, then runs the pipeline.
+
+### Interactive mode
+
 ```
 Replicate this paper: /path/to/paper.pdf
 ```
 
-The skill will ask for the PDF path and a short project name, then start the pipeline.
+### PaperBench modes
 
-### Resume an interrupted replication
+Provide a PaperBench bundle directory:
+```
+/pAI-Replicator
+# Select mode [2] or [3]
+# Provide bundle path: /path/to/paper_id/
+```
+
+Bundle format (from official PaperBench):
+```
+paper_id/
+  paper.pdf
+  paper.md
+  addendum.md
+  rubric.json
+  blacklist.txt
+  config.yaml
+  assets/         (optional)
+```
+
+### Resume
 
 ```
 /pAI-Replicator
+# Select "Resume"
+# Provide workspace path
 ```
 
-Select "Resume" and provide the workspace path. The skill picks up from where it stopped.
+---
+
+## Pipeline (13 Phases)
+
+| # | Phase | What happens |
+|---|-------|-------------|
+| 0.5 | Bundle Ingestion | Parse PaperBench bundle (modes 2-3 only) |
+| 1 | PDF Ingestion | Deep extraction from paper PDF (mode 1 only) |
+| 2 | Rubric Decomposition | Build/import PaperBench-style rubric |
+| 3 | Repository Architecture | Design file structure mapped to rubric |
+| 4 | Persona Council | Three reviewers debate the plan |
+| 5 | Core Algorithm | Models, losses, key algorithms |
+| 6 | Data Pipeline | Data loading with mock-data CPU support |
+| 7 | Training Infrastructure | Training loop, optimizer, evaluation |
+| 8 | CPU Verification | **Hard gate** — all 6-7 test categories must pass |
+| 9 | Baselines | Comparison methods from paper tables |
+| 10 | Experiment Scripts | One script per table/figure |
+| 11 | Documentation | README, configs, reproduction instructions |
+| 12 | Rubric Audit | Coverage assessment + score estimate |
+| 13 | Final Review | Re-run tests, final score, submission packaging (mode 3) |
+
+**Quality gates:**
+- Gate 1: Rubric coverage must be sufficient (auto-retry)
+- Gate 2: CPU verification — hard block, 3 auto-retries then escalate
+- Gate 3: Score < 20% triggers restart from Phase 1 with gap context
 
 ---
 
 ## What Gets Produced
 
-For each replicated paper, the skill creates a workspace:
-
 ```
 replication_{timestamp}/
-  input/
-    paper.pdf
+  input/                        # Paper PDF or bundle files
   analysis_workspace/
-    paper_analysis.json       # Deep structured extraction
-    rubric.json               # PaperBench-style rubric (40-100+ items)
-    architecture_plan.json    # File → rubric item mapping
-    implementation_checklist.json
-    final_summary.md          # One-page replication summary
-  code_workspace/{paper_name}/
-    README.md                 # Full reproduction guide
+    paper_analysis.json         # Structured extraction
+    rubric.json                 # Rubric (generated or imported from bundle)
+    official_rubric.json        # Official rubric (PaperBench modes)
+    architecture_plan.json
+    experiment_manifest.json
+  code_workspace/{name}/
+    README.md
     requirements.txt
-    src/                      # Model, data, training, evaluation
-    baselines/                # All comparison methods
-    scripts/                  # run_table1.py, run_figure3.py, etc.
-    configs/                  # default.yaml + per-experiment configs
-    tests/                    # CPU sanity test suite
-    results/                  # Experiment outputs
+    reproduce.sh                # PaperBench Full mode only
+    src/
+    baselines/
+    scripts/                    # run_table1.py, run_figure3.py, etc.
+    configs/
+    results/
   verification_workspace/
-    cpu_test_results.json     # All 6 test categories, all must pass
-    shape_checks.log
-    loss_curve_checks.log
+    cpu_test_results.json       # All test categories must pass
   rubric_audit/
-    rubric_gap_report.md
     paperbench_score_estimate.json
-  persona_workspace/
-    council_synthesis_round_N.md
+    rubric_gap_report.md
+  submission/                   # PaperBench Full mode only
 ```
 
 ---
 
-## Constraints
+## Submission Validation (PaperBench Full)
 
-- **No GPU job submission** — Scripts are written and smoke-tested on CPU, but full training is not run
-- **CPU experiments only** — Phase 7 runs mandatory CPU tests (all must pass)
-- **No cluster submissions** — Works entirely locally
-- **Very interactive** — Checkpoints after every phase; never advances silently
+```bash
+python scripts/validate_submission.py <repo_dir> --blacklist <blacklist.txt>
+```
+
+Optional Docker-based reproduction test:
+```bash
+./scripts/run_local_reproduce_check.sh <repo_dir> --smoke
+```
+
+See `docs/submission_requirements.md` for the full submission spec.
 
 ---
 
-## Architecture
+## Limitations
 
-pAI-Replicator is modeled after the [poggioai-msc-claude](../poggioai-msc-claude) skill but repurposed for replication:
-
-| | MSc Skill | pAI-Replicator |
-|---|---|---|
-| Input | Research hypothesis | Paper PDF |
-| Output | final_paper.tex | Executable code repo |
-| Personas | Practical, Rigor, Narrative | Architect, Rigor, PaperBench Judge |
-| Checkpoints | Key milestones | Every phase |
-| CPU experiments | Optional | Mandatory gate |
-| Score metric | Review score ≥6/10 | PaperBench estimate |
+- **Internal scores are estimates, not official PaperBench scores.** The skill estimates scores by inspecting code and running CPU tests. Official scores require the PaperBench LLM judge pipeline, which we cannot run locally.
+- **No GPU training.** Scripts are generated and smoke-tested on CPU (`--max-steps 1`). Full training requires GPU hardware.
+- **No fresh-container testing.** The skill runs in your environment. Use `run_local_reproduce_check.sh` with Docker for container-based validation.
+- **Result match items are conservative estimates.** Without running full experiments, result correctness is inferred from code quality.
 
 ---
 
@@ -128,49 +149,37 @@ pAI-Replicator is modeled after the [poggioai-msc-claude](../poggioai-msc-claude
 
 ```
 pAI-Replicator-claude/
-  SKILL.md                    # Main orchestrator
-  README.md                   # This file
+  SKILL.md                          # Main orchestrator (v2.0)
   templates/
-    state.json                # State machine template
-    rubric_template.json      # PaperBench rubric schema
-  docs/
-    execution-protocol.md     # Pass limits + RESUME template
-    cpu-verification-protocol.md  # Required CPU tests
-    persona-council.md        # Council debate rules
-    checkpoint-protocol.md    # Per-phase checkpoint format
-    paperbench-scoring.md     # Scoring strategy reference
-    token-logging.md          # Logging script
+    state.json                      # State machine template
+    rubric_template.json            # Rubric schema
+    reproduce.sh.tmpl               # reproduce.sh boilerplate
   prompts/
-    01-persona-architect.md   # Code Architect persona
-    02-persona-rigor.md       # Algorithmic Rigor persona
-    03-persona-paperbench-judge.md  # PaperBench Judge persona
-    04-persona-synthesis.md   # Council Synthesis coordinator
-    05-pdf-ingestion.md       # Phase 1
-    06-rubric-decomposition.md  # Phase 2
-    07-repo-architecture.md   # Phase 3
-    08-core-algorithm.md      # Phase 4
-    09-data-pipeline.md       # Phase 5
-    10-training-infrastructure.md  # Phase 6
-    11-cpu-verification.md    # Phase 7 (mandatory gate)
-    12-baseline-implementation.md  # Phase 8
-    13-experiment-scripts.md  # Phase 9
-    14-documentation.md       # Phase 10
-    15-rubric-audit.md        # Phase 11
-    16-final-review.md        # Phase 12
+    00-paper-decomposition.md       # Experiment module decomposition
+    00a-bundle-ingestion.md         # Phase 0.5: PaperBench bundle parsing
+    01-04: Persona definitions + synthesis
+    05-16: Phase prompts (ingestion → final review)
+    17-reproduce-sh.md              # reproduce.sh spec
+    18-submission-packaging.md      # Submission validation + export
+  scripts/
+    validate_submission.py          # Submission checker
+    export_direct_submission.py     # Clean export
+    run_local_reproduce_check.sh    # Docker reproduction test
+  docs/
+    v2_architecture.md              # Mode comparison
+    benchmark_integration.md        # PaperBench integration guide
+    submission_requirements.md      # Valid submission spec
+    cpu-verification-protocol.md    # CPU test categories
+    paperbench-scoring.md           # Scoring reference
+    ...
 ```
 
 ---
 
-## Why PaperBench?
+## PaperBench Context
 
-PaperBench (OpenAI, 2025) is the hardest paper replication benchmark available:
-- 20 ICML 2024 Spotlight/Oral papers
-- 8,316 individually gradable rubric items
-- Three categories: Code Development (40%), Execution (30%), Result Match (30%)
-- Best AI agent: 27% — humans: 41%
+[PaperBench](https://openai.com/index/paperbench/) (OpenAI, 2025) evaluates AI agents on replicating 20 ICML 2024 papers across 8,316 rubric items. Three categories: Code Development (~40%), Execution (~30%), Result Match (~30%).
 
-Our approach targets this benchmark by:
-1. Building a PaperBench-style rubric for each paper before writing code
-2. Ensuring every implementation decision traces to a rubric item
-3. Running CPU sanity checks that guarantee the code is at least runnable
-4. Creating execution scripts for every table and figure in the paper
+Best AI agents score ~21-27%. ML PhD humans score ~41%. The Code-Dev variant (code quality only) reaches ~43% for the best agent.
+
+This skill targets PaperBench by building a rubric-first pipeline: decompose the paper into gradable items, then implement to maximize coverage. CPU verification ensures the code runs. Experiment scripts ensure execution items are covered.

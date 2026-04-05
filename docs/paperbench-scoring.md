@@ -1,5 +1,7 @@
 # PaperBench Scoring Reference — pAI-Replicator
 
+> **IMPORTANT:** All scores produced by pAI-Replicator are INTERNAL ESTIMATES — they are NOT official PaperBench scores. Official PaperBench grading requires the PaperBench LLM judge pipeline running in a fresh container environment. Internal estimates are based on code inspection and CPU smoke tests, not actual GPU execution results. They correlate with but do not equal official scores.
+
 ## What PaperBench Evaluates
 
 PaperBench is OpenAI's benchmark for AI agents' ability to replicate ML research papers. It evaluates 20 ICML 2024 Spotlight/Oral papers.

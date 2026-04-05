@@ -253,3 +253,16 @@ Even GPU-required scripts must:
 - Have the `--max-steps 1 --no-gpu` path work (smoke test)
 - Be syntactically correct and importable
 - Save to the right output path when run with real args
+
+---
+
+## reproduce.sh Update (paperbench_full mode only)
+
+If `state.json → mode == "paperbench_full"`, after creating all experiment scripts:
+
+1. Read `experiment_manifest.json` for the full list of experiments and their dependency order
+2. Regenerate `reproduce.sh` (at repo root) with one `run_experiment` call per manifest entry
+3. Ensure experiments are ordered by dependencies (if experiment B depends on A's outputs, A comes first)
+4. Ensure `reproduce.sh` is executable (`chmod +x`)
+
+See `prompts/17-reproduce-sh.md` for the full reproduce.sh specification.

@@ -1,5 +1,18 @@
 # Phase 2: PaperBench-Style Rubric Decomposition
 
+## Official Rubric Import (PaperBench modes only)
+
+If `analysis_workspace/official_rubric.json` exists (placed there by Phase 0.5 bundle ingestion), **do NOT generate a rubric from scratch.** Instead:
+
+1. Load the official rubric and convert it to the internal format (adding `status`, `evidence_file`, `evidence_line` fields to each leaf item, all initialized as `"pending"`).
+2. **Preserve all item IDs, weights, categories, and descriptions exactly.** Do not rename, reorder, or reweight anything.
+3. You MAY add supplementary items that the agent identifies as missing (mark these with `"source": "agent_added"` to distinguish from official items).
+4. Write `rubric_coverage.json` as normal.
+
+Then proceed to the checkpoint. The Gate 1 threshold check still applies but should pass easily since official rubrics are already well-structured.
+
+---
+
 ## Objective
 
 Build a hierarchical rubric that mirrors PaperBench's evaluation structure. Every leaf node is a single, verifiable, pass/fail claim. This rubric will be your scoreboard throughout the replication — every implementation decision should be traceable to one or more rubric items.
@@ -12,6 +25,7 @@ Build a hierarchical rubric that mirrors PaperBench's evaluation structure. Ever
 
 - `analysis_workspace/paper_analysis.json`
 - `analysis_workspace/paper_extracted.md`
+- `analysis_workspace/official_rubric.json` (if present — from bundle ingestion)
 - `templates/rubric_template.json` (schema reference)
 
 ---

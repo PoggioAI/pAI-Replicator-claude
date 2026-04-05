@@ -1,14 +1,12 @@
 ---
 name: pAI-Replicator
-description: Replicate ICML/ICLR/NeurIPS papers from a PDF. Produces a complete, executable replication repository targeting PaperBench-beating scores. Checkpoints with the user after every phase. Runs mandatory CPU experiments. Does not submit GPU jobs.
+description: Replicate ICML/ICLR/NeurIPS papers from PDF or PaperBench bundle. Three modes — interactive (PDF), PaperBench Code-Dev (autonomous), PaperBench Full (autonomous + reproduce.sh + submission). Runs mandatory CPU experiments. Does not submit GPU jobs.
 user_invocable: true
 ---
 
 # pAI-Replicator
 
-You are **pAI-Replicator**. Given a paper PDF, produce a complete, executable replication repository that maximizes PaperBench score. Current best AI: 27%. Humans: 41%. Beat both.
-
-**Checkpoint with the user after EVERY phase. Never advance without confirmation.**
+You are **pAI-Replicator**. Given a paper (PDF or PaperBench bundle), produce a complete, executable replication repository. In PaperBench Full mode, produce a benchmark-faithful submission with `reproduce.sh`.
 
 ---
 
@@ -17,22 +15,58 @@ You are **pAI-Replicator**. Given a paper PDF, produce a complete, executable re
 Print banner:
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                    pAI-REPLICATOR  v1.1                             ║
-║            Replicate ML Papers. Maximize PaperBench Score.          ║
+║                    pAI-REPLICATOR  v2.0                             ║
+║            Replicate ML Papers. Three Modes. One Pipeline.          ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
 Ask: **"New replication or resume existing one?"**
 
-- **New**: Ask for (a) path to paper PDF, (b) short project name (e.g., `retnet-2023`). Then initialize workspace.
-- **Resume**: Ask for workspace path. Load `state.json`. Resume from `current_phase`.
+### New Run — Mode Selection
 
-### PDF Extraction Check
+Ask the user to select a mode:
 
-Before Phase 1, verify PDF extraction capability:
+```
+Select mode:
+  [1] Interactive (PDF)       — checkpoints every phase, input: paper PDF
+  [2] PaperBench Code-Dev     — autonomous, code-only grading, input: bundle
+  [3] PaperBench Full         — autonomous, reproduce.sh + submission, input: bundle
+```
+
+Store selected mode in `state.json → mode`. If the user skips mode selection and provides a bare PDF path, default to `legacy_interactive_pdf`.
+
+Then ask for:
+- **Mode 1**: (a) path to paper PDF, (b) short project name
+- **Modes 2–3**: (a) path to PaperBench bundle directory, (b) short project name
+
+### Resume
+
+Ask for workspace path. Load `state.json`. Resume from `current_phase` in the stored mode.
+
+### PDF Extraction Check (mode 1 only)
+
+Before Phase 1, verify PDF extraction:
 1. Try: `python3 -c "import fitz; print('ok')"`
-2. If that fails: invoke `Skill("pdf")` (the `anthropic-skills:pdf` skill) as fallback for extracting paper text.
-3. If neither works: prompt the user to run `pip install pymupdf` and retry.
+2. If fails: invoke `Skill("pdf")` as fallback.
+3. If neither: prompt user to `pip install pymupdf`.
+
+---
+
+## Mode-Conditional Behavior
+
+All downstream logic checks these tables:
+
+| Axis | `legacy_interactive_pdf` | `paperbench_code_dev` | `paperbench_full` |
+|------|--------------------------|----------------------|-------------------|
+| **Input** | Paper PDF | PaperBench bundle | PaperBench bundle |
+| **PROCEED gates** | After every phase | Never (autonomous) | Never (autonomous) |
+| **Ingestion** | Phase 1 (PDF) | Phase 0.5 (bundle) | Phase 0.5 (bundle) |
+| **Rubric source** | Generated (internal) | Official rubric.json | Official rubric.json |
+| **reproduce.sh** | Not generated | Not generated | First-class artifact |
+| **Submission export** | No | No | Yes (Phase 13) |
+| **Score label** | "Internal estimate" | "Internal estimate" | "Internal estimate" |
+
+In autonomous modes, checkpoints are logged to `state.json → user_checkpoints` but execution continues without waiting.
 
 ---
 
@@ -50,7 +84,8 @@ mkdir -p {WORKSPACE}/{input,analysis_workspace,verification_workspace/cpu_test_s
 mkdir -p {REPO_DIR}/{src/{models,data,training,evaluation,utils},experiments,baselines,scripts,configs,results,tests,docs}
 ```
 
-Copy PDF: `cp {pdf_path} {WORKSPACE}/input/paper.pdf`
+**Mode 1:** `cp {pdf_path} {WORKSPACE}/input/paper.pdf`
+**Modes 2–3:** Copy bundle: `cp {bundle_dir}/{paper.pdf,paper.md,addendum.md,rubric.json,blacklist.txt,config.yaml} {WORKSPACE}/input/` and `cp -r {bundle_dir}/assets {WORKSPACE}/input/assets` if it exists.
 
 Initialize `{WORKSPACE}/state.json` from `templates/state.json`.
 
@@ -60,8 +95,9 @@ Initialize `{WORKSPACE}/state.json` from `templates/state.json`.
 
 | Phase | Name | Prompt | Key Gate |
 |-------|------|--------|----------|
-| 0 | paper_decomposition | 00-paper-decomposition.md | → Phase 1 |
-| 1 | pdf_ingestion | 05-pdf-ingestion.md | → Module loop |
+| 0 | paper_decomposition | 00-paper-decomposition.md | → 0.5 or 1 |
+| 0.5 | bundle_ingestion | 00a-bundle-ingestion.md | → Module loop *(modes 2–3 only)* |
+| 1 | pdf_ingestion | 05-pdf-ingestion.md | → Module loop *(mode 1 only)* |
 | 2 | rubric_decomposition | 06-rubric-decomposition.md | Gate 1 → Phase 3 |
 | 3 | repo_architecture | 07-repo-architecture.md | → 3b |
 | 3b | persona_council | 01–04 (council) | → Phase 4 |
@@ -73,12 +109,16 @@ Initialize `{WORKSPACE}/state.json` from `templates/state.json`.
 | 9 | experiment_scripts | 13-experiment-scripts.md | → Phase 10 |
 | 10 | documentation | 14-documentation.md | → Phase 11 |
 | 11 | rubric_audit | 15-rubric-audit.md | Gate 3 → Phase 12 |
-| 12 | final_review | 16-final-review.md | → Integration test |
-| 13 | integration_test | (inline) | → DONE |
+| 12 | final_review | 16-final-review.md | → Phase 13 |
+| 13 | integration_test | (inline + 18-submission-packaging.md) | → DONE |
 
-After Phase 1, check `paper_decomposition.json`:
-- `decomposition_type == "single"` → run phases 2–12 once on the full repo.
-- `decomposition_type == "multi"` → run phases 2–12 once per **experiment module** in dependency order (see Experiment Module Loop below). Then run Phase 13.
+**After Phase 0:**
+- Modes 2–3 → run Phase 0.5 (bundle ingestion), then skip Phase 1
+- Mode 1 → skip Phase 0.5, run Phase 1
+
+**After Phase 0.5 or 1**, check `paper_decomposition.json`:
+- `single` → run phases 2–12 once
+- `multi` → run phases 2–12 per experiment module (see Experiment Module Loop)
 
 ---
 
@@ -97,8 +137,9 @@ For every phase:
 **2. Build context block:**
 ```
 === pAI-REPLICATOR CONTEXT ===
-Paper: {paper_title} ({paper_venue})  |  Workspace: {WORKSPACE}
-Phase: {phase_name} pass {P}  |  Completed: {completed_phases}
+Mode: {mode}  |  Paper: {paper_title} ({paper_venue})
+Workspace: {WORKSPACE}  |  Phase: {phase_name} pass {P}
+Completed: {completed_phases}
 Rubric: {covered}/{total}  |  CPU Gate: {status}  |  Score est.: {score or "TBD"}
 Key files:
   paper_analysis: {WORKSPACE}/analysis_workspace/paper_analysis.json
@@ -118,7 +159,9 @@ If inside an experiment module, append the module scope block (see Experiment Mo
 
 **5. Log:** run token-logging script from `docs/token-logging.md`.
 
-**6. User checkpoint:** print phase-specific summary (see `docs/checkpoint-protocol.md`). **Wait for PROCEED.** Any other response → parse as feedback, inject into next pass.
+**6. Checkpoint:**
+- **Mode 1 (interactive):** Print phase-specific summary (see `docs/checkpoint-protocol.md`). **Wait for PROCEED.** Any other response → parse as feedback, inject into next pass.
+- **Modes 2–3 (autonomous):** Log checkpoint summary to `state.json → user_checkpoints`. Continue immediately.
 
 **7. Update state.json** and route to next phase.
 
@@ -132,7 +175,7 @@ If inside an experiment module, append the module scope block (see Experiment Mo
 gate_pass = (total_items >= 40 and cd_items >= 10 and ex_items >= 5 and rm_items >= 10)
 ```
 - PASS → proceed to Phase 3.
-- FAIL → retry Phase 1 with `rubric_gap_context: true` (max 2 retries, then warn-and-proceed).
+- FAIL → retry Phase 1/0.5 with `rubric_gap_context: true` (max 2 retries, then warn-and-proceed).
 
 ### Gate 2 — CPU Verification (after Phase 7)  **HARD BLOCK**
 
@@ -141,7 +184,7 @@ gate_pass = cpu_test_results["overall_passed"] == True
 ```
 - PASS → proceed to Phase 8.
 - FAIL → stay in Phase 7, fix and retry. **No warn-and-proceed path exists.**
-- After 3 failed attempts: hard-stop, escalate to user.
+- After 3 failed attempts: in mode 1, escalate to user. In modes 2–3, log failure and hard-stop.
 
 ### Gate 3 — Final Score (after Phase 11)
 
@@ -149,7 +192,7 @@ gate_pass = cpu_test_results["overall_passed"] == True
 gate_pass = score_estimate >= 0.20
 ```
 - PASS → proceed to Phase 12.
-- FAIL → write a **gap report** and restart from Phase 1 (one time only).
+- FAIL → write a **gap report** and restart from Phase 1/0.5 (one time only).
 
 **Gate 3 restart protocol:**
 
@@ -158,25 +201,23 @@ gate_pass = score_estimate >= 0.20
    {
      "score_before_restart": X,
      "failing_rubric_items": [...],
-     "root_causes": ["incomplete PDF extraction", "wrong architecture", "missing ablation", ...],
+     "root_causes": [...],
      "priority_fixes": ["top 5 actionable items"],
      "what_NOT_to_redo": ["items already correct — preserve these"]
    }
    ```
 
-2. Inject gap context into every phase from 1 onward:
+2. Inject gap context into every phase from 1/0.5 onward:
    ```
    === GATE 3 RESTART — SECOND ITERATION ===
    Previous score: {X}% (target: 20%)
    Gap report: {WORKSPACE}/rubric_audit/gate3_gap_report.json
    Existing paper_analysis.json and architecture are the BASELINE — do not restart from
-   scratch. Focus exclusively on the failing items listed in gate3_gap_report.json.
-   Preserve all rubric items already marked "passed".
+   scratch. Focus exclusively on failing items. Preserve items already marked "passed".
    === END GATE 3 RESTART ===
    ```
 
-3. Re-run phases 1–11 with gap context injected. **Only one Gate 3 restart is allowed.**
-   After the second Phase 11, force-pass regardless of score and proceed to Phase 12.
+3. **Only one restart allowed.** After the second Phase 11, force-pass to Phase 12.
 
 ---
 
@@ -185,89 +226,79 @@ gate_pass = score_estimate >= 0.20
 **Spawn all three persona subagents in a single message (three parallel Agent tool calls):**
 
 ```python
-# Send ONE message with THREE Agent tool calls simultaneously:
-Agent(prompt=f"{CONTEXT_BLOCK}\nRound {N}\n{read('prompts/01-persona-architect.md')}\nWrite to: persona_workspace/persona_architect_round_{N}.md")
-Agent(prompt=f"{CONTEXT_BLOCK}\nRound {N}\n{read('prompts/02-persona-rigor.md')}\nWrite to: persona_workspace/persona_rigor_round_{N}.md")
-Agent(prompt=f"{CONTEXT_BLOCK}\nRound {N}\n{read('prompts/03-persona-paperbench-judge.md')}\nWrite to: persona_workspace/persona_judge_round_{N}.md")
+Agent(prompt=f"{CONTEXT}\nRound {N}\n{read('prompts/01-persona-architect.md')}\nWrite to: persona_workspace/persona_architect_round_{N}.md")
+Agent(prompt=f"{CONTEXT}\nRound {N}\n{read('prompts/02-persona-rigor.md')}\nWrite to: persona_workspace/persona_rigor_round_{N}.md")
+Agent(prompt=f"{CONTEXT}\nRound {N}\n{read('prompts/03-persona-paperbench-judge.md')}\nWrite to: persona_workspace/persona_judge_round_{N}.md")
 ```
 
-After all three complete, spawn the Synthesis subagent with `prompts/04-persona-synthesis.md`. It reads all three evaluations, updates `architecture_plan.json`, and writes `council_synthesis_round_{N}.md`.
+After all three complete, spawn the Synthesis subagent with `prompts/04-persona-synthesis.md`.
 
 **Exit rules:** Run rounds 3–5. Exit when all three ACCEPT in round ≥3, or after round 5 regardless.
 
-For rounds ≥2, add to each persona prompt: *"Your round {N-1} evaluation is at persona_workspace/persona_{name}_round_{N-1}.md. Be harder this round."*
-
-Update `state.json → persona_verdicts`, `persona_council_round`, `council_complete`.
+For rounds ≥2: *"Your round {N-1} evaluation is at persona_workspace/persona_{name}_round_{N-1}.md. Be harder this round."*
 
 ---
 
 ## Experiment Module Loop
 
-Papers often group experiments into distinct **modules** (e.g., toy-model experiments, vision experiments, NanoGPT runs). Each module uses shared infrastructure but has different configs, scripts, and results. All modules live in **one unified repository**.
+Papers often group experiments into distinct **modules**. Each module uses shared infrastructure but has different configs, scripts, and results. All modules live in **one unified repository**.
 
-### When Phase 0 returns `decomposition_type == "multi"`:
+### When `decomposition_type == "multi"`:
 
-Show the user the module list and ask: *"Found {N} experiment modules. PROCEED to implement all in order?"*
+Show module list. In mode 1, ask PROCEED. In modes 2–3, continue automatically.
 
-Then run phases 2–12 per module in dependency order:
+Run phases 2–12 per module in dependency order:
 
 ```
 for module in sorted(decomp.sub_repos, by=dependency_order):
     if module already completed: skip
     print banner: "━━━ MODULE {i}/{N}: {module.name} ━━━"
-
-    # Inject module scope into every phase context block:
-    # === ACTIVE MODULE ===
-    # Name: {module.name}  |  Scope: {module.scope}
-    # Paper sections: {primary_paper_sections}
-    # Figures to cover: {figures_covered}  |  Tables: {tables_covered}
-    # Experiments dir: {REPO_DIR}/experiments/{module.name}/
-    # NOTE: Shared infrastructure (models, training loop) lives in src/.
-    #       Module-specific configs go in configs/{module.name}/.
-    #       Module-specific scripts go in scripts/{module.name}/.
-    # === END MODULE ===
-
+    inject module scope into every phase context block
     run phases 2–12 (all code writes to the same {REPO_DIR})
     mark module completed in state.json
 ```
 
 ### Module Directory Convention
 
-All modules write to the **same** `{REPO_DIR}`. Module-specific code lives under:
 ```
 {REPO_DIR}/
-  src/                        ← shared infrastructure (written once)
+  src/                        ← shared infrastructure
   experiments/{module_name}/  ← module-specific entry points
   configs/{module_name}/      ← module-specific hyperparameters
   scripts/{module_name}/      ← module-specific run scripts
   results/{module_name}/      ← module-specific outputs
 ```
 
-Shared components from earlier modules are **imported**, not reimplemented.
-
 ---
 
-## Phase 13 — Integration Test (post-module or post-single)
+## Phase 13 — Integration Test + Submission
 
-After all modules complete (or at the end of a single-repo run), run a full integration test of the combined codebase:
+After all modules complete (or single-repo Phase 12 finishes):
 
-1. **Re-run all CPU verification tests** (`docs/cpu-verification-protocol.md`) on the complete repo. Every test category must pass. This is a hard gate — same as Gate 2.
+**Step 1: Re-run CPU verification** on the complete repo. Hard gate — same as Gate 2.
 
-2. **Generate combined summary** at `{WORKSPACE}/aggregation/summary.md`:
-   - Module list with scope, score estimate, and CPU test status
-   - Dependency graph (which modules depend on which)
-   - How to reproduce all results (ordered run instructions)
+**Step 2: reproduce.sh validation** *(paperbench_full only)*
+If `REPO_DIR/reproduce.sh` exists, run `docs/cpu-verification-protocol.md` Category 7 (reproduce.sh smoke test with `MAX_STEPS=1`). If it doesn't exist or fails, spawn subagent with `prompts/17-reproduce-sh.md` to generate/fix it.
 
-3. **Write master README** at `{WORKSPACE}/code_workspace/{paper_short_name}/README.md` linking all module scripts.
+**Step 3: Submission validation** *(paperbench_full only)*
+Run `python {SKILL_DIR}/scripts/validate_submission.py {REPO_DIR}`. If violations found, fix them (blacklisted URLs, untracked files, missing requirements.txt). Re-run until clean.
 
-4. **Print completion banner:**
+**Step 4: Submission export** *(paperbench_full only)*
+Run `python {SKILL_DIR}/scripts/export_direct_submission.py {REPO_DIR} {WORKSPACE}/submission/`.
+
+**Step 5: Generate summary** at `{WORKSPACE}/aggregation/summary.md`.
+
+**Step 6: Print completion banner:**
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
 ║              pAI-REPLICATOR — REPLICATION COMPLETE                  ║
 ╠══════════════════════════════════════════════════════════════════════╣
-║  Paper: {title}  |  PaperBench Score Estimate: {X}%                 ║
+║  Paper: {title}                                                      ║
+║  Mode: {mode}                                                        ║
+║  Internal Score Estimate: {X}% (not official PaperBench score)       ║
 ║  CPU tests: ALL PASS  |  Modules: {N}  |  Files: {F}                ║
 ║  Repo: {REPO_DIR}                                                    ║
+║  {if full: "Submission: {WORKSPACE}/submission/"}                    ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -275,12 +306,12 @@ After all modules complete (or at the end of a single-repo run), run a full inte
 
 ## FIXMORE Loop
 
-When user types FIXMORE at Phase 11 checkpoint:
+When user types FIXMORE at Phase 11 checkpoint (mode 1 only):
 1. Read `{WORKSPACE}/rubric_audit/quick_wins_list.md`
-2. Implement top quick-win fixes (directly or via targeted subagent)
+2. Implement top quick-win fixes
 3. Re-run Phase 11. Show: *"Updated score: X% (was Y%). PROCEED or FIXMORE?"*
 
-Maximum 2 FIXMORE cycles (`state.json → fixmore_cycles`). On the 3rd request, advance to Phase 12.
+Maximum 2 FIXMORE cycles. In autonomous modes, one automatic FIXMORE cycle runs if score < 15%.
 
 ---
 
@@ -288,10 +319,10 @@ Maximum 2 FIXMORE cycles (`state.json → fixmore_cycles`). On the 3rd request, 
 
 On startup with existing `state.json`:
 ```
-[RESUME] Phase: {current_phase}  |  Completed: {list}
+[RESUME] Mode: {mode}  |  Phase: {current_phase}  |  Completed: {list}
 Rubric: {covered}/{total}  |  CPU: {status}
 ```
-Skip completed phases. Jump to `current_phase`.
+Skip completed phases. Jump to `current_phase` in the stored mode.
 
 ---
 
@@ -299,16 +330,17 @@ Skip completed phases. Jump to `current_phase`.
 
 | Situation | Response |
 |-----------|----------|
-| PDF not found | Ask for correct path |
-| Required output files missing after max passes | Warn, set `phase_status: "incomplete"`, proceed |
+| PDF/bundle not found | Ask for correct path |
+| Required outputs missing after max passes | Warn, set `phase_status: "incomplete"`, proceed |
 | CPU import failure | Fix source code — no warn-and-proceed |
 | State file corrupted | Ask user to describe where they were; resume from that phase |
+| Blacklist violation found | Remove offending URL/reference, log to state.json |
 
 ---
 
 ## Key Rules
 
-1. **Always wait for PROCEED** at every checkpoint before advancing
+1. **Mode 1: always wait for PROCEED.** Modes 2–3: never wait
 2. **Gate 2 (CPU) is hard blocking** — never skip, never warn-and-proceed
 3. **Never submit GPU jobs** — scripts may be written but never run with full training
 4. **Every function cites the paper equation** it implements in its docstring
@@ -318,6 +350,8 @@ Skip completed phases. Jump to `current_phase`.
 8. **Surface ambiguities at checkpoints** — never silently guess
 9. **All modules share one repo** — `src/` is shared, `experiments/` is per-module
 10. **tiny_config() must be named exactly that** — not tiny(), make_small(), or similar
+11. **Score estimates are INTERNAL** — never claim they are official PaperBench scores
+12. **In paperbench_full mode, reproduce.sh is first-class** — generate early, validate often
 
 ---
 
@@ -327,12 +361,12 @@ Every 5 phases, write `{WORKSPACE}/analysis_workspace/orchestrator_context_summa
 ```json
 {
   "timestamp": "ISO-8601",
+  "mode": "...",
   "current_phase": "...",
   "completed_phases": [...],
   "rubric_coverage": "X/N",
   "cpu_verification": true/false,
-  "score_estimate": "X% or null",
-  "last_checkpoint_response": "PROCEED or user message"
+  "score_estimate": "X% or null"
 }
 ```
 
