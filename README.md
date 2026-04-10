@@ -2,6 +2,12 @@
 
 A Claude Code skill for replicating ML papers. Three modes: interactive PDF replication, autonomous PaperBench Code-Dev, and full PaperBench submission with `reproduce.sh`.
 
+## Install
+
+```bash
+npx skills add PoggioAI/pAI-Replicator-claude
+```
+
 ---
 
 ## Modes
