@@ -1,6 +1,6 @@
 # pAI-Replicator
 
-A Claude Code skill for replicating ML papers. Three modes: interactive PDF replication, autonomous PaperBench Code-Dev, and full PaperBench submission with `reproduce.sh`.
+A Claude Code skill for replicating ML papers. Four modes: interactive PDF replication, autonomous PaperBench Code-Dev, full PaperBench submission with `reproduce.sh`, and PaperBench-faithful autonomous replication without rubric access.
 
 ## Install
 
@@ -17,12 +17,15 @@ npx skills add PoggioAI/pAI-Replicator-claude
 | **[1] Interactive (PDF)** | Paper PDF | Checkpoint every phase | Code repo (no submission) |
 | **[2] PaperBench Code-Dev** | PaperBench bundle | Fully autonomous | Code repo (no reproduce.sh) |
 | **[3] PaperBench Full** | PaperBench bundle | Fully autonomous | Submission-ready git repo |
+| **[4] PaperBench Autonomous (faithful)** | `paper.pdf` + `paper.md` + `addendum.md` + `blacklist.txt` without rubric | Fully autonomous | Submission-ready git repo |
 
 **Interactive** is for human-guided replication of any ML paper from a PDF. You approve each phase before the pipeline advances.
 
 **Code-Dev** ingests a PaperBench bundle (paper.md, rubric.json, addendum, blacklist) and runs the full pipeline autonomously. No `reproduce.sh` generation — targets PaperBench's code-only grading variant.
 
 **Full** does everything Code-Dev does, plus generates `reproduce.sh`, validates the submission against PaperBench requirements, and exports a self-contained git repo ready for the official evaluation pipeline.
+
+**PaperBench Autonomous** mirrors the candidate-visible PaperBench input contract: it uses the paper, addendum, and blacklist but refuses to run if `rubric.json` is present. It internally generates its working rubric from the paper, produces `reproduce.sh`, and exports a submission package.
 
 ---
 
@@ -61,6 +64,30 @@ paper_id/
   assets/         (optional)
 ```
 
+### PaperBench Autonomous mode
+
+Provide a PaperBench-faithful candidate input directory:
+```
+/pAI-Replicator
+# Select mode [4]
+# Provide input path: /path/to/paper_input/
+```
+
+Input format:
+```
+paper_input/
+  paper.pdf       # required
+  paper.md        # required, preferred for analysis
+  addendum.md     # required author clarifications
+  blacklist.txt   # required forbidden URLs/repos
+  agent.env       # optional API keys
+```
+
+Mode 4 aborts if `rubric.json` is present:
+```
+Mode 4 is meant to run without rubric access. Found rubric.json in input — refusing to run. If you want to use the rubric, use Mode 2 or Mode 3 instead.
+```
+
 ### Resume
 
 ```
@@ -76,7 +103,7 @@ paper_id/
 | # | Phase | What happens |
 |---|-------|-------------|
 | 0.5 | Bundle Ingestion | Parse PaperBench bundle (modes 2-3 only) |
-| 1 | PDF Ingestion | Deep extraction from paper PDF (mode 1 only) |
+| 1 | PDF Ingestion | Deep extraction from paper PDF/markdown and addendum (modes 1 and 4) |
 | 2 | Rubric Decomposition | Build/import PaperBench-style rubric |
 | 3 | Repository Architecture | Design file structure mapped to rubric |
 | 4 | Persona Council | Three reviewers debate the plan |
@@ -88,7 +115,7 @@ paper_id/
 | 10 | Experiment Scripts | One script per table/figure |
 | 11 | Documentation | README, configs, reproduction instructions |
 | 12 | Rubric Audit | Coverage assessment + score estimate |
-| 13 | Final Review | Re-run tests, final score, submission packaging (mode 3) |
+| 13 | Final Review | Re-run tests, final score, submission packaging (modes 3 and 4) |
 
 **Quality gates:**
 - Gate 1: Rubric coverage must be sufficient (auto-retry)
@@ -105,13 +132,14 @@ replication_{timestamp}/
   analysis_workspace/
     paper_analysis.json         # Structured extraction
     rubric.json                 # Rubric (generated or imported from bundle)
-    official_rubric.json        # Official rubric (PaperBench modes)
+    official_rubric.json        # Official rubric (modes 2-3 only)
+    addendum_notes.md           # Mode 4 author clarification summary
     architecture_plan.json
     experiment_manifest.json
   code_workspace/{name}/
     README.md
     requirements.txt
-    reproduce.sh                # PaperBench Full mode only
+    reproduce.sh                # PaperBench Full and Autonomous modes only
     src/
     baselines/
     scripts/                    # run_table1.py, run_figure3.py, etc.
@@ -122,12 +150,12 @@ replication_{timestamp}/
   rubric_audit/
     paperbench_score_estimate.json
     rubric_gap_report.md
-  submission/                   # PaperBench Full mode only
+  submission/                   # PaperBench Full and Autonomous modes only
 ```
 
 ---
 
-## Submission Validation (PaperBench Full)
+## Submission Validation (PaperBench Full and Autonomous)
 
 ```bash
 python scripts/validate_submission.py <repo_dir> --blacklist <blacklist.txt>

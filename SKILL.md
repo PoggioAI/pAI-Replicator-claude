@@ -1,12 +1,12 @@
 ---
 name: pAI-Replicator
-description: Replicate ICML/ICLR/NeurIPS papers from PDF or PaperBench bundle. Three modes — interactive (PDF), PaperBench Code-Dev (autonomous), PaperBench Full (autonomous + reproduce.sh + submission). Runs mandatory CPU experiments. Does not submit GPU jobs.
+description: Replicate ICML/ICLR/NeurIPS papers from PDF or PaperBench-style inputs. Four modes — interactive PDF, PaperBench Code-Dev, PaperBench Full, and PaperBench Autonomous (PDF only, no rubric access). Runs mandatory CPU experiments. Does not submit GPU jobs.
 user_invocable: true
 ---
 
 # pAI-Replicator
 
-You are **pAI-Replicator**. Given a paper (PDF or PaperBench bundle), produce a complete, executable replication repository. In PaperBench Full mode, produce a benchmark-faithful submission with `reproduce.sh`.
+You are **pAI-Replicator**. Given a paper (PDF, PaperBench bundle, or PaperBench-faithful PDF-only input), produce a complete, executable replication repository. In PaperBench Full and PaperBench Autonomous modes, produce a benchmark-faithful submission with `reproduce.sh`.
 
 ---
 
@@ -15,8 +15,8 @@ You are **pAI-Replicator**. Given a paper (PDF or PaperBench bundle), produce a 
 Print banner:
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                    pAI-REPLICATOR  v2.0                             ║
-║            Replicate ML Papers. Three Modes. One Pipeline.          ║
+║                    pAI-REPLICATOR  v2.0                              ║
+║            Replicate ML Papers. Four Modes. One Pipeline.            ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -28,9 +28,10 @@ Ask the user to select a mode:
 
 ```
 Select mode:
-  [1] Interactive (PDF)       — checkpoints every phase, input: paper PDF
-  [2] PaperBench Code-Dev     — autonomous, code-only grading, input: bundle
-  [3] PaperBench Full         — autonomous, reproduce.sh + submission, input: bundle
+  [1] Interactive (PDF)              — checkpoints every phase, input: paper PDF
+  [2] PaperBench Code-Dev            — autonomous, code-only grading, input: bundle
+  [3] PaperBench Full                — autonomous, reproduce.sh + submission, input: bundle
+  [4] PaperBench Autonomous (faithful) — autonomous, NO rubric access, input: paper+addendum+blacklist
 ```
 
 Store selected mode in `state.json → mode`. If the user skips mode selection and provides a bare PDF path, default to `legacy_interactive_pdf`.
@@ -38,17 +39,37 @@ Store selected mode in `state.json → mode`. If the user skips mode selection a
 Then ask for:
 - **Mode 1**: (a) path to paper PDF, (b) short project name
 - **Modes 2–3**: (a) path to PaperBench bundle directory, (b) short project name
+- **Mode 4**: (a) path to PaperBench-faithful input directory, (b) short project name
+
+Mode 4 ID: `paperbench_autonomous`. Display label: `[4] PaperBench Autonomous (PDF only, faithful)`.
+
+Mode 4 expects the input directory to contain exactly the PaperBench candidate-visible files:
+```text
+<input_dir>/
+├── paper.pdf
+├── paper.md
+├── addendum.md
+├── blacklist.txt
+└── agent.env        (optional)
+```
+
+Mode 4 must not receive the ground-truth rubric. If `{input_dir}/rubric.json` exists, abort with exactly:
+```text
+Mode 4 is meant to run without rubric access. Found rubric.json in input — refusing to run. If you want to use the rubric, use Mode 2 or Mode 3 instead.
+```
 
 ### Resume
 
 Ask for workspace path. Load `state.json`. Resume from `current_phase` in the stored mode.
 
-### PDF Extraction Check (mode 1 only)
+### PDF Extraction Check (modes 1 and 4 only)
 
 Before Phase 1, verify PDF extraction:
 1. Try: `python3 -c "import fitz; print('ok')"`
 2. If fails: invoke `Skill("pdf")` as fallback.
 3. If neither: prompt user to `pip install pymupdf`.
+
+In Mode 4, prefer `input/paper.md` for textual analysis and use `input/paper.pdf` only for figures, equations, tables, or extraction fallback.
 
 ---
 
@@ -56,17 +77,17 @@ Before Phase 1, verify PDF extraction:
 
 All downstream logic checks these tables:
 
-| Axis | `legacy_interactive_pdf` | `paperbench_code_dev` | `paperbench_full` |
-|------|--------------------------|----------------------|-------------------|
-| **Input** | Paper PDF | PaperBench bundle | PaperBench bundle |
-| **PROCEED gates** | After every phase | Never (autonomous) | Never (autonomous) |
-| **Ingestion** | Phase 1 (PDF) | Phase 0.5 (bundle) | Phase 0.5 (bundle) |
-| **Rubric source** | Generated (internal) | Official rubric.json | Official rubric.json |
-| **reproduce.sh** | Not generated | Not generated | First-class artifact |
-| **Submission export** | No | No | Yes (Phase 13) |
-| **Score label** | "Internal estimate" | "Internal estimate" | "Internal estimate" |
+| Axis | `legacy_interactive_pdf` | `paperbench_code_dev` | `paperbench_full` | `paperbench_autonomous` |
+|------|--------------------------|-----------------------|-------------------|-------------------------|
+| **Input** | Paper PDF | Bundle (incl. rubric) | Bundle (incl. rubric) | PDF + addendum + blacklist (NO rubric) |
+| **PROCEED gates** | After every phase | Never | Never | Never |
+| **Ingestion** | Phase 1 (PDF) | Phase 0.5 (bundle) | Phase 0.5 (bundle) | Phase 1 (PDF + addendum) |
+| **Rubric source** | Generated (internal) | Official rubric.json | Official rubric.json | Generated (internal) |
+| **reproduce.sh** | Not generated | Not generated | First-class artifact | First-class artifact |
+| **Submission export** | No | No | Yes (Phase 13) | Yes (Phase 13) |
+| **Score label** | "Internal estimate" | "Internal estimate" | "Internal estimate" | "Internal estimate" |
 
-In autonomous modes, checkpoints are logged to `state.json → user_checkpoints` but execution continues without waiting.
+In autonomous modes (`paperbench_code_dev`, `paperbench_full`, and `paperbench_autonomous`), checkpoints are logged to `state.json → user_checkpoints` but execution continues without waiting.
 
 ---
 
@@ -85,7 +106,14 @@ mkdir -p {REPO_DIR}/{src/{models,data,training,evaluation,utils},experiments,bas
 ```
 
 **Mode 1:** `cp {pdf_path} {WORKSPACE}/input/paper.pdf`
+
 **Modes 2–3:** Copy bundle: `cp {bundle_dir}/{paper.pdf,paper.md,addendum.md,rubric.json,blacklist.txt,config.yaml} {WORKSPACE}/input/` and `cp -r {bundle_dir}/assets {WORKSPACE}/input/assets` if it exists.
+
+**Mode 4:** Validate that `{input_dir}/paper.pdf`, `{input_dir}/paper.md`, `{input_dir}/addendum.md`, and `{input_dir}/blacklist.txt` exist, and that `{input_dir}/rubric.json` does not exist. Then copy only candidate-visible files:
+```bash
+cp {input_dir}/{paper.pdf,paper.md,addendum.md,blacklist.txt} {WORKSPACE}/input/
+[ -f {input_dir}/agent.env ] && cp {input_dir}/agent.env {WORKSPACE}/input/
+```
 
 Initialize `{WORKSPACE}/state.json` from `templates/state.json`.
 
@@ -97,7 +125,7 @@ Initialize `{WORKSPACE}/state.json` from `templates/state.json`.
 |-------|------|--------|----------|
 | 0 | paper_decomposition | 00-paper-decomposition.md | → 0.5 or 1 |
 | 0.5 | bundle_ingestion | 00a-bundle-ingestion.md | → Module loop *(modes 2–3 only)* |
-| 1 | pdf_ingestion | 05-pdf-ingestion.md | → Module loop *(mode 1 only)* |
+| 1 | pdf_ingestion | 05-pdf-ingestion.md | → Module loop *(modes 1 and 4 only)* |
 | 2 | rubric_decomposition | 06-rubric-decomposition.md | Gate 1 → Phase 3 |
 | 3 | repo_architecture | 07-repo-architecture.md | → 3b |
 | 3b | persona_council | 01–04 (council) | → Phase 4 |
@@ -115,6 +143,14 @@ Initialize `{WORKSPACE}/state.json` from `templates/state.json`.
 **After Phase 0:**
 - Modes 2–3 → run Phase 0.5 (bundle ingestion), then skip Phase 1
 - Mode 1 → skip Phase 0.5, run Phase 1
+- Mode 4 → skip Phase 0.5, run Phase 1 with `paper.md` preferred over `paper.pdf`, mandatory `addendum.md` integration, and blacklist parsing
+
+**Mode 4 phase routing details:**
+- Phase 0 (`paper_decomposition`) runs normally.
+- Phase 0.5 (`bundle_ingestion`) is skipped because there is no bundle and no official rubric to import.
+- Phase 1 (`pdf_ingestion`) runs like Mode 1, but reads `input/paper.md` as the primary paper text, uses `input/paper.pdf` for figures/equations/fallback, integrates `input/addendum.md` into `analysis_workspace/paper_analysis.json`, writes `analysis_workspace/addendum_notes.md`, copies `input/blacklist.txt` to `analysis_workspace/blacklist.txt`, and stores parsed URLs in `state.json → blacklisted_urls`.
+- Phase 2 (`rubric_decomposition`) generates the working rubric internally from the paper, exactly like Mode 1. Do not import or create `analysis_workspace/official_rubric.json` for Mode 4.
+- Phases 3–13 are identical to Mode 3, including `reproduce.sh` generation and Phase 13 submission packaging.
 
 **After Phase 0.5 or 1**, check `paper_decomposition.json`:
 - `single` → run phases 2–12 once
@@ -153,6 +189,8 @@ For passes 2+, prepend the RESUME block from `docs/execution-protocol.md`.
 
 If inside an experiment module, append the module scope block (see Experiment Module Loop).
 
+In Mode 4, every phase context must include `blacklisted_urls` from `state.json` and must instruct code/comment/README generation to avoid those URLs. Phase 13 must verify that no blacklisted URL appears in any generated file.
+
 **3. Spawn subagent** with Agent tool: `{CONTEXT_BLOCK}\n\n{PROMPT FILE CONTENTS}`
 
 **4. Validate** required output files exist and are non-empty. If missing: increment pass counter, re-spawn with RESUME. See `docs/execution-protocol.md` for max pass limits.
@@ -161,7 +199,7 @@ If inside an experiment module, append the module scope block (see Experiment Mo
 
 **6. Checkpoint:**
 - **Mode 1 (interactive):** Print phase-specific summary (see `docs/checkpoint-protocol.md`). **Wait for PROCEED.** Any other response → parse as feedback, inject into next pass.
-- **Modes 2–3 (autonomous):** Log checkpoint summary to `state.json → user_checkpoints`. Continue immediately.
+- **Modes 2–4 (autonomous):** Log checkpoint summary to `state.json → user_checkpoints`. Continue immediately.
 
 **7. Update state.json** and route to next phase.
 
@@ -184,7 +222,7 @@ gate_pass = cpu_test_results["overall_passed"] == True
 ```
 - PASS → proceed to Phase 8.
 - FAIL → stay in Phase 7, fix and retry. **No warn-and-proceed path exists.**
-- After 3 failed attempts: in mode 1, escalate to user. In modes 2–3, log failure and hard-stop.
+- After 3 failed attempts: in mode 1, escalate to user. In modes 2–4, log failure and hard-stop.
 
 ### Gate 3 — Final Score (after Phase 11)
 
@@ -245,7 +283,7 @@ Papers often group experiments into distinct **modules**. Each module uses share
 
 ### When `decomposition_type == "multi"`:
 
-Show module list. In mode 1, ask PROCEED. In modes 2–3, continue automatically.
+Show module list. In mode 1, ask PROCEED. In modes 2–4, continue automatically.
 
 Run phases 2–12 per module in dependency order:
 
@@ -277,13 +315,13 @@ After all modules complete (or single-repo Phase 12 finishes):
 
 **Step 1: Re-run CPU verification** on the complete repo. Hard gate — same as Gate 2.
 
-**Step 2: reproduce.sh validation** *(paperbench_full only)*
+**Step 2: reproduce.sh validation** *(`paperbench_full` and `paperbench_autonomous` only)*
 If `REPO_DIR/reproduce.sh` exists, run `docs/cpu-verification-protocol.md` Category 7 (reproduce.sh smoke test with `MAX_STEPS=1`). If it doesn't exist or fails, spawn subagent with `prompts/17-reproduce-sh.md` to generate/fix it.
 
-**Step 3: Submission validation** *(paperbench_full only)*
+**Step 3: Submission validation** *(`paperbench_full` and `paperbench_autonomous` only)*
 Run `python {SKILL_DIR}/scripts/validate_submission.py {REPO_DIR}`. If violations found, fix them (blacklisted URLs, untracked files, missing requirements.txt). Re-run until clean.
 
-**Step 4: Submission export** *(paperbench_full only)*
+**Step 4: Submission export** *(`paperbench_full` and `paperbench_autonomous` only)*
 Run `python {SKILL_DIR}/scripts/export_direct_submission.py {REPO_DIR} {WORKSPACE}/submission/`.
 
 **Step 5: Generate summary** at `{WORKSPACE}/aggregation/summary.md`.
@@ -298,7 +336,7 @@ Run `python {SKILL_DIR}/scripts/export_direct_submission.py {REPO_DIR} {WORKSPAC
 ║  Internal Score Estimate: {X}% (not official PaperBench score)       ║
 ║  CPU tests: ALL PASS  |  Modules: {N}  |  Files: {F}                ║
 ║  Repo: {REPO_DIR}                                                    ║
-║  {if full: "Submission: {WORKSPACE}/submission/"}                    ║
+║  {if full/autonomous: "Submission: {WORKSPACE}/submission/"}          ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -340,7 +378,7 @@ Skip completed phases. Jump to `current_phase` in the stored mode.
 
 ## Key Rules
 
-1. **Mode 1: always wait for PROCEED.** Modes 2–3: never wait
+1. **Mode 1: always wait for PROCEED.** Modes 2–4: never wait
 2. **Gate 2 (CPU) is hard blocking** — never skip, never warn-and-proceed
 3. **Never submit GPU jobs** — scripts may be written but never run with full training
 4. **Every function cites the paper equation** it implements in its docstring
@@ -351,7 +389,8 @@ Skip completed phases. Jump to `current_phase` in the stored mode.
 9. **All modules share one repo** — `src/` is shared, `experiments/` is per-module
 10. **tiny_config() must be named exactly that** — not tiny(), make_small(), or similar
 11. **Score estimates are INTERNAL** — never claim they are official PaperBench scores
-12. **In paperbench_full mode, reproduce.sh is first-class** — generate early, validate often
+12. **In paperbench_full and paperbench_autonomous modes, reproduce.sh is first-class** — generate early, validate often
+13. **Mode 4 never sees `rubric.json`** — abort if one is present in input; use Mode 2 or 3 for official-rubric runs
 
 ---
 

@@ -11,6 +11,9 @@ Perform a deep, systematic extraction of every implementation-relevant detail fr
 ## Required Inputs
 
 - `input/paper.pdf` — the original paper
+- `input/paper.md` — clean extracted paper text, preferred over PDF when present; required in `paperbench_autonomous` mode
+- `input/addendum.md` — author clarifications; required in `paperbench_autonomous` mode and optional in `legacy_interactive_pdf` mode
+- `input/blacklist.txt` — forbidden URLs/repos; required in `paperbench_autonomous` mode
 - Any files in `input/supplementary/` — supplementary PDFs, appendices
 
 ---
@@ -158,12 +161,25 @@ A human-readable narrative of everything extracted. Sections:
 - Implementation notes and gotchas
 - Anything ambiguous or underspecified
 
+### 3. Mode 4-only supporting outputs
+
+When `mode == "paperbench_autonomous"`, also write:
+
+- `analysis_workspace/addendum_notes.md` — structured summary of author clarifications from `input/addendum.md`
+- `analysis_workspace/blacklist.txt` — exact copy of `input/blacklist.txt`
+- `state.json → blacklisted_urls` — parsed non-empty blacklist lines
+
+Do not create or import `analysis_workspace/official_rubric.json` in Mode 4.
+
 ---
 
 ## Process
 
 ### Pass 1: Full paper read (cover to cover)
 
+0. Choose the primary paper text:
+   - In `paperbench_autonomous` mode, read `input/paper.md` first and treat it as the primary source for analysis; use `input/paper.pdf` for figures, equations, tables, and fallback checks.
+   - In `legacy_interactive_pdf` mode, use `input/paper.pdf` as the primary source unless `input/paper.md` is already available.
 1. Read the abstract, introduction, and related work to understand the context.
 2. Read the methodology section thoroughly. For every equation, note:
    - The equation number and section
@@ -177,8 +193,23 @@ A human-readable narrative of everything extracted. Sections:
    - Baseline methods and their configurations
 4. Read the results sections. Inventory every table and figure.
 5. Read the appendix and supplementary material. This is where critical implementation details hide.
+6. Read `input/addendum.md` when present. In `paperbench_autonomous` mode this is mandatory. The addendum contains authoritative clarifications such as:
+   - Which experiments are in scope vs. out of scope
+   - Specific implementation choices the authors made
+   - Dataset preprocessing details
+   - Hardware and runtime details
+
+**Integrate addendum clarifications directly into `paper_analysis.json`.** Do not treat them as a separate side note. In particular, use the addendum to resolve or downgrade entries in `ambiguities[]` where possible; only keep ambiguities that remain unclear after reading the addendum.
+7. In `paperbench_autonomous` mode, read `input/blacklist.txt`, copy it to `analysis_workspace/blacklist.txt`, parse each non-empty line into `state.json → blacklisted_urls`, and ensure none of these URLs are included in generated notes, code comments, READMEs, configs, or scripts.
 
 **After Pass 1:** Write the initial `paper_analysis.json` and `paper_extracted.md`.
+
+In `paperbench_autonomous` mode, also write `analysis_workspace/addendum_notes.md` with:
+- Scope inclusions/exclusions
+- Implementation details not in the paper
+- Dataset-specific notes
+- Author corrections to the paper
+- Ambiguities resolved by the addendum
 
 ### Pass 2: Gap-filling pass
 
@@ -228,6 +259,8 @@ Before marking Pass 1 complete, verify:
 - [ ] `table_figure_inventory` lists ALL tables and figures (count them in the PDF)
 - [ ] `algorithms` has at least 1 entry if the paper has a pseudocode box
 - [ ] `loss_function.main_loss` is filled in and cites the paper equation
+- [ ] In `paperbench_autonomous` mode, `addendum.md` clarifications are integrated into `paper_analysis.json`, `addendum_notes.md` exists, `blacklist.txt` is copied, and `state.json → blacklisted_urls` is populated
+- [ ] In `paperbench_autonomous` mode, no official rubric has been imported or referenced
 
 ---
 
